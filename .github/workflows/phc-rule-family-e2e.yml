@@ -15,77 +15,96 @@ jobs:
       TENANT_A: 10000000-0000-0000-0000-000000000001
       TENANT_B: 20000000-0000-0000-0000-000000000002
     steps:
-      - name: Sessions and IDs
+      - name: Discover representative IDs
         shell: bash
         run: |
           set -euo pipefail
-          for P in ownerA reviewerA viewerA ownerB; do B=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$P"); T=$(printf '%s' "$B"|python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"); N=$(printf '%s' "$P"|tr '[:lower:]' '[:upper:]'); echo "${N}_TOKEN=$T" >> "$GITHUB_ENV"; eval "${N}_TOKEN='$T'"; done
-          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.(1,14,29,32,47)")
-          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id,requirement_definition_id&tenant_id=eq.$TENANT_A")
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); B=$(tok ownerB)
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.(1,14,29,32,47)")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/facility_requirements?select=id,requirement_definition_id&tenant_id=eq.$TENANT_A")
           printf '%s' "$D">defs.json; printf '%s' "$F">frs.json
-          python3 -c "import json;D=json.load(open('defs.json'));F=json.load(open('frs.json'));m={d['id']:d['indicator_no'] for d in D};o={m[f['requirement_definition_id']]:f['id'] for f in F if f['requirement_definition_id'] in m};assert set(o)=={1,14,29,32,47};[print(f'I{k}={v}') for k,v in o.items()]" >> "$GITHUB_ENV"
-          DID1=$(printf '%s' "$D"|python3 -c "import sys,json;d=json.load(sys.stdin);print(next(x['id'] for x in d if x['indicator_no']==1))")
-          B=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_B&requirement_definition_id=eq.$DID1")
-          printf '%s' "$B"|python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d)==1;print('I1B='+d[0]['id'])" >> "$GITHUB_ENV"
+          python3 -c "import json;D=json.load(open('defs.json'));F=json.load(open('frs.json'));m={d['id']:d['indicator_no'] for d in D};o={m[f['requirement_definition_id']]:f['id'] for f in F if f['requirement_definition_id'] in m};assert set(o)=={1,14,29,32,47};[print(f'I{k}={v}') for k,v in sorted(o.items())]" >> "$GITHUB_ENV"
+          DID1=$(python3 -c "import json;D=json.load(open('defs.json'));print(next(x['id'] for x in D if x['indicator_no']==1))")
+          X=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $B" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_B&requirement_definition_id=eq.$DID1")
+          printf '%s' "$X" | python3 -c "import sys,json;d=json.load(sys.stdin);assert len(d)==1;print('I1B='+d[0]['id'])" >> "$GITHUB_ENV"
+
       - name: STATIC family Indicator 1
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I1"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I1"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='READY'"
-          printf 'rerun-static-%s-%s' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > x.pdf
-          curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNERA_TOKEN" -F "requirement_id=$I1" -F 'evidence_type=signboard_photo' -F 'file=@x.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload" >/dev/null
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I1"); printf '%s' "$R"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); R=$(tok reviewerA)
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"applicability_reason":null,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I1"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I1"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='READY'"
+          O=$(tok ownerA); printf 'fresh-static-%s-%s' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > x.pdf
+          curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $O" -F "requirement_id=$I1" -F 'evidence_type=signboard_photo' -F 'file=@x.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload" >/dev/null
+          Q=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I1"); printf '%s' "$Q"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+
       - name: N-A family Indicator 14
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":false,"applicability_reason":"Synthetic no-staff proof","review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='NOT_APPLICABLE'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"applicability_reason":null,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
-          for T in job_description_set performance_evaluation_records; do printf '%s-%s-%s' "$T" "$GITHUB_RUN_ID" "$RANDOM">n.pdf; curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNERA_TOKEN" -F "requirement_id=$I14" -F "evidence_type=$T" -F 'file=@n.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload" >/dev/null; done
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); R=$(tok reviewerA)
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":false,"applicability_reason":"Synthetic no-staff proof","review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='NOT_APPLICABLE'"
+          O=$(tok ownerA); curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"applicability_reason":null,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I14"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I14\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+
       - name: EVENT family Indicator 29
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I29"
-          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I29\",\"fact_key\":\"referral_occurred\",\"fact_value\":false}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I29\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I29"
-          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I29\",\"fact_key\":\"referral_occurred\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I29"); printf '%s' "$R"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I29\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); R=$(tok reviewerA)
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I29"
+          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I29\",\"fact_key\":\"referral_occurred\",\"fact_value\":false}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I29\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I29"
+          O=$(tok ownerA); curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I29\",\"fact_key\":\"referral_occurred\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
+          Q=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I29"); printf '%s' "$Q"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I29\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+
       - name: SERVICE family Indicator 32
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I32"
-          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I32\",\"fact_key\":\"home_visit_provided\",\"fact_value\":false}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I32\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I32"
-          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I32\",\"fact_key\":\"home_visit_provided\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I32"); printf '%s' "$R"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I32\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); R=$(tok reviewerA)
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I32"
+          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I32\",\"fact_key\":\"home_visit_provided\",\"fact_value\":false}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I32\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I32"
+          O=$(tok ownerA); curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I32\",\"fact_key\":\"home_visit_provided\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
+          Q=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I32"); printf '%s' "$Q"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I32\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+
       - name: MULTI DOMAIN family Indicator 47
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I47"
-          for P in instrument_processing_performed:false ppe_required:false; do K=${P%%:*}; V=${P#*:}; curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I47\",\"fact_key\":\"$K\",\"fact_value\":$V}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"; done
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I47\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I47"
-          curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I47\",\"fact_key\":\"instrument_processing_performed\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I47"); printf '%s' "$R"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
-          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I47\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          O=$(tok ownerA); R=$(tok reviewerA)
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I47"
+          for P in instrument_processing_performed:false ppe_required:false; do K=${P%%:*}; V=${P#*:}; curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I47\",\"fact_key\":\"$K\",\"fact_value\":$V}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"; done
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I47\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $R" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I47"
+          O=$(tok ownerA); curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -H 'Prefer: resolution=merge-duplicates,return=minimal' -d "{\"tenant_id\":\"$TENANT_A\",\"facility_requirement_id\":\"$I47\",\"fact_key\":\"instrument_processing_performed\",\"fact_value\":true}" "$BASE/rest/v1/facility_requirement_facts?on_conflict=facility_requirement_id,fact_key"
+          Q=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I47"); printf '%s' "$Q"|python3 -c "import sys,json;assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $O" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I47\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json;assert json.load(sys.stdin)=='REVIEW'"
+
       - name: Role tenant and production guards
         shell: bash
         run: |
           set -euo pipefail
-          C=$(curl -sS -o /tmp/v -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); test "$C" != 200
-          C=$(curl -sS -o /tmp/b -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1B\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); test "$C" = 400
-          P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION"); printf '%s' "$P"|python3 -c "import sys,json;assert json.load(sys.stdin)==[];print('rule family regression PASS')"
+          tok(){ curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$1" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"; }
+          V=$(tok viewerA); B=$(tok ownerB); O=$(tok ownerA)
+          CODE=$(curl -sS -o viewer.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $V" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I1\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); test "$CODE" != "200"
+          X=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $B" "$BASE/rest/v1/facility_requirements?select=id&id=eq.$I1"); printf '%s' "$X"|python3 -c "import sys,json;assert json.load(sys.stdin)==[]"
+          P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $O" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION"); printf '%s' "$P"|python3 -c "import sys,json;assert json.load(sys.stdin)==[]"
+          echo 'family regression PASS'
