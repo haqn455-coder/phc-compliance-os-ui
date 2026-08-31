@@ -1,0 +1,21 @@
+name: PHC GP Readiness Snapshot Test
+on:
+  push:
+    paths:
+      - 'product/gp_readiness_snapshot_v0_1.json'
+      - 'product/gp_readiness_snapshot_eval.mjs'
+      - 'product/gp_readiness_snapshot_eval.test.mjs'
+      - '.github/workflows/phc-gp-readiness-snapshot-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run deterministic snapshot tests
+        run: node product/gp_readiness_snapshot_eval.test.mjs
