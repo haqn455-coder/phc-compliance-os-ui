@@ -2,6 +2,9 @@ name: PHC GP Snapshot Persistence E2E
 on:
   push:
     paths:
+      - 'product/gp_snapshot_ops_logic.mjs'
+      - 'product/gp_snapshot_ops_ui.js'
+      - 'index.html'
       - '.github/workflows/phc-gp-snapshot-persistence-e2e.yml'
   workflow_dispatch:
 permissions:
@@ -16,6 +19,10 @@ jobs:
       TENANT_A: 10000000-0000-0000-0000-000000000001
       TENANT_B: 20000000-0000-0000-0000-000000000002
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Obtain fresh synthetic sessions
         shell: bash
         run: |
@@ -26,7 +33,7 @@ jobs:
             N=$(printf '%s' "$P" | tr '[:lower:]' '[:upper:]')
             echo "${N}_TOKEN=$T" >> "$GITHUB_ENV"
           done
-      - name: Owner A inserts privacy-minimum snapshot
+      - name: Owner A inserts deterministic privacy-minimum snapshot
         shell: bash
         run: |
           set -euo pipefail
@@ -39,7 +46,7 @@ jobs:
             'district_city':'Layyah',
             'respondent_role':'Owner-doctor',
             'contact':'03000000000',
-            'answers':{'Q01':'CI Snapshot','Q02':'Layyah','Q03':'Owner-doctor','Q04':'03000000000','Q05':'GP','Q07':['Consultation']},
+            'answers':{'Q01':'CI Snapshot','Q02':'Layyah','Q03':'Owner-doctor','Q04':'03000000000','Q05':'GP','Q07':['Consultation'],'Q08':'Unsure','Q10':'Not sure'},
             'triggered_rule_ids':['R01','R02'],
             'lead_status':'SNAPSHOT_CREATED',
             'pilot_status':'WAITLIST_UNTIL_PRODUCTION_PACK'
@@ -49,24 +56,69 @@ jobs:
           R=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d "$BODY" "$BASE/rest/v1/presales_snapshots")
           ID=$(printf '%s' "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; x=d[0]; assert set(x['answers']).issubset({'Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09','Q10','Q11','Q12','Q13','Q14','Q15','Q16','Q17','Q18','Q19'}); assert len(x['triggered_rule_ids'])<=5; print(x['id'])")
           echo "SNAP_ID=$ID" >> "$GITHUB_ENV"
-      - name: Owner A can read own tenant snapshot
+      - name: Owner A list and reopen data are tenant scoped
         shell: bash
         run: |
           set -euo pipefail
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id,tenant_id,answers,triggered_rule_ids&id=eq.$SNAP_ID")
-          printf '%s' "$R" | python3 -c "import sys,json,os; d=json.load(sys.stdin); assert len(d)==1 and d[0]['tenant_id']==os.environ['TENANT_A']"
-      - name: Viewer A cannot read presales snapshots
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id,tenant_id,clinic_name,district_city,respondent_role,contact,created_at,answers,triggered_rule_ids,lead_status,pilot_status&tenant_id=eq.$TENANT_A&id=eq.$SNAP_ID")
+          printf '%s' "$R" > reopen.json
+          printf '%s' "$R" | python3 -c "import sys,json,os; d=json.load(sys.stdin); assert len(d)==1 and d[0]['tenant_id']==os.environ['TENANT_A'] and d[0]['id']==os.environ['SNAP_ID']"
+          node --input-type=module -e "import fs from 'node:fs'; import {evaluateSnapshot} from './product/gp_readiness_snapshot_eval.mjs'; const cfg=JSON.parse(fs.readFileSync('product/gp_readiness_snapshot_v0_1.json','utf8')); const row=JSON.parse(fs.readFileSync('reopen.json','utf8'))[0]; const got=evaluateSnapshot(cfg,row.answers).flagged_actions.map(x=>x.rule_id); if(JSON.stringify(got)!==JSON.stringify(row.triggered_rule_ids)) throw new Error('deterministic reopen mismatch'); console.log('deterministic reopen/reprint data PASS')"
+      - name: Viewer A cannot list or reopen presales snapshots
         shell: bash
         run: |
           set -euo pipefail
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id&id=eq.$SNAP_ID")
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id,answers&id=eq.$SNAP_ID")
           printf '%s' "$R" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
       - name: Owner B cannot see Tenant A snapshot
         shell: bash
         run: |
           set -euo pipefail
-          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id&id=eq.$SNAP_ID")
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id,answers&id=eq.$SNAP_ID")
           printf '%s' "$R" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
+      - name: Owner A controlled status update preserves answers and preview rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=answers,triggered_rule_ids,lead_status,pilot_status&id=eq.$SNAP_ID")
+          printf '%s' "$BEFORE" > before.json
+          PATCH='{"lead_status":"QUALIFIED","pilot_status":"WAITLIST_UNTIL_PRODUCTION_PACK"}'
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d "$PATCH" "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID"
+          AFTER=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=answers,triggered_rule_ids,lead_status,pilot_status&id=eq.$SNAP_ID")
+          printf '%s' "$AFTER" > after.json
+          python3 - <<'PY'
+          import json
+          b=json.load(open('before.json'))[0]; a=json.load(open('after.json'))[0]
+          assert b['answers']==a['answers']
+          assert b['triggered_rule_ids']==a['triggered_rule_ids']
+          assert b['lead_status']=='SNAPSHOT_CREATED' and a['lead_status']=='QUALIFIED'
+          assert a['pilot_status']=='WAITLIST_UNTIL_PRODUCTION_PACK'
+          PY
+      - name: Viewer and Owner B cannot change Tenant A status
+        shell: bash
+        run: |
+          set -euo pipefail
+          PATCH='{"lead_status":"CLOSED","pilot_status":"STOPPED"}'
+          curl -sS -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d "$PATCH" "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID" > viewer_patch.json
+          curl -sS -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d "$PATCH" "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID" > ownerb_patch.json
+          printf '%s' "$(cat viewer_patch.json)" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
+          printf '%s' "$(cat ownerb_patch.json)" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=lead_status,pilot_status&id=eq.$SNAP_ID")
+          printf '%s' "$R" | python3 -c "import sys,json; x=json.load(sys.stdin)[0]; assert x['lead_status']=='QUALIFIED' and x['pilot_status']=='WAITLIST_UNTIL_PRODUCTION_PACK'"
+      - name: Snapshot answers and preview rules cannot be silently mutated
+        shell: bash
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -o immutable.json -w '%{http_code}' -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d '{"answers":{"Q01":"mutated"}}' "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID")
+          test "$CODE" = "400"
+          CODE2=$(curl -sS -o immutable_rules.json -w '%{http_code}' -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d '{"triggered_rule_ids":["R11"]}' "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID")
+          test "$CODE2" = "400"
+      - name: Audit event records the authorised status transition
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/audit_events?select=action,before_data,after_data&entity_type=eq.presales_snapshots&entity_id=eq.$SNAP_ID&action=eq.UPDATE&order=occurred_at.desc&limit=1")
+          printf '%s' "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; x=d[0]; assert x['before_data']['lead_status']=='SNAPSHOT_CREATED'; assert x['after_data']['lead_status']=='QUALIFIED'; assert x['before_data']['answers']==x['after_data']['answers']; assert x['before_data']['triggered_rule_ids']==x['after_data']['triggered_rule_ids']"
       - name: Owner B cannot insert into Tenant A
         shell: bash
         run: |
@@ -96,5 +148,7 @@ jobs:
           if [ -n "${SNAP_ID:-}" ]; then
             curl -sS --fail-with-body -X DELETE -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Prefer: return=minimal' "$BASE/rest/v1/presales_snapshots?id=eq.$SNAP_ID"
           fi
+          C=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id&clinic_name=like.CI%20Snapshot%25")
+          printf '%s' "$C" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
           P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION")
-          printf '%s' "$P" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]; print('Snapshot persistence RLS E2E PASS; production rules remain zero')"
+          printf '%s' "$P" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]; print('Snapshot operations RLS E2E PASS; production rules remain zero')"
