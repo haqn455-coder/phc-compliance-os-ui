@@ -7,6 +7,9 @@ on:
       - 'product/gp_readiness_snapshot_eval.test.mjs'
       - 'product/gp_snapshot_form_logic.mjs'
       - 'product/gp_snapshot_form_logic.test.mjs'
+      - 'product/gp_snapshot_ops_logic.mjs'
+      - 'product/gp_snapshot_ops_logic.test.mjs'
+      - 'product/gp_snapshot_ops_ui.js'
       - 'index.html'
       - '.github/workflows/phc-gp-readiness-snapshot-test.yml'
   workflow_dispatch:
@@ -24,3 +27,5 @@ jobs:
         run: node product/gp_readiness_snapshot_eval.test.mjs
       - name: Run snapshot form and privacy tests
         run: node product/gp_snapshot_form_logic.test.mjs
+      - name: Run snapshot operations logic/source tests
+        run: node product/gp_snapshot_ops_logic.test.mjs
