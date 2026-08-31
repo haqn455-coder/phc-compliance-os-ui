@@ -1,0 +1,19 @@
+{
+  "manifest_version": "0.1",
+  "date": "2026-08-31",
+  "scope": "PHC GP/Family Physician/Specialist Clinics",
+  "source": "PHC 2017 GP MSDS / Regulatory Master v0.2",
+  "machine_family_e2e_run": 33378335911,
+  "production_write_authorized": false,
+  "reviewed_ok": [1,2,4,8,9,10,12,13,14,15,16,17,18,27,28,29,32,33,34,35,37,41,44,47],
+  "reviewed_with_change": [5,11,20,30,42,43],
+  "review_hold_existing": [3,6,21,25,31,36,38,39,40,46],
+  "unsupported_v1": [23,24,26],
+  "reviewed_ok_count": 24,
+  "reviewed_with_change_count": 6,
+  "human_regulatory_signoff": "REQUIRED_BEFORE_PRODUCTION",
+  "final_gate_policy": "GO or GO_WITH_CONDITIONS may authorize only REVIEWED_OK candidates after human regulatory signoff; no batch promotion by default",
+  "linked_current_source_notes": {
+    "20": "Current PM&DC Code of Ethics source must be pinned; PM&DC announced revised Code enforced 2 Mar 2026. Current rule excluded pending TEST_ONLY v2 source metadata + retest."
+  }
+}
