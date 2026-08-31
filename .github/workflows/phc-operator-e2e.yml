@@ -35,13 +35,9 @@ jobs:
           set -euo pipefail
           CRED=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/credentials?select=id&tenant_id=eq.$TENANT&facility_id=eq.$FACILITY&credential_type=eq.PMDC&limit=1")
           CRED_ID=$(printf '%s' "$CRED" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
-            -d '{"registration_number":"SYNTH-PMDC-001","expiry_date":"2020-01-01","renewal_in_progress":false}' \
-            "$BASE/rest/v1/credentials?id=eq.$CRED_ID"
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
-            -d '{"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$REQ"
-          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
-            -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"registration_number":"SYNTH-PMDC-001","expiry_date":"2020-01-01","renewal_in_progress":false}' "$BASE/rest/v1/credentials?id=eq.$CRED_ID"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$REQ"
+          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
           printf '%s' "$STATE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d=='EXPIRED', d; print('expired credential PASS')"
           echo "CRED_ID=$CRED_ID" >> "$GITHUB_ENV"
 
@@ -49,61 +45,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
-            -d '{"expiry_date":"2028-12-31","renewal_in_progress":false}' "$BASE/rest/v1/credentials?id=eq.$CRED_ID"
-          printf 'synthetic-certificate-%s' "$GITHUB_RUN_ID" > cert.txt
-          printf 'synthetic-display-photo-%s' "$GITHUB_RUN_ID" > photo.txt
-          cp cert.txt cert.pdf
-          cp photo.txt photo.png
-          CERT_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" \
-            -F "requirement_id=$REQ" -F 'evidence_type=credential_certificate' -F 'file=@cert.pdf;type=application/pdf' \
-            "$BASE/functions/v1/phc-api/upload")
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"expiry_date":"2028-12-31","renewal_in_progress":false}' "$BASE/rest/v1/credentials?id=eq.$CRED_ID"
+          printf 'synthetic-certificate-%s' "$GITHUB_RUN_ID" > cert.pdf
+          printf 'synthetic-display-photo-%s' "$GITHUB_RUN_ID" > photo.png
+          CERT_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" -F "requirement_id=$REQ" -F 'evidence_type=credential_certificate' -F 'file=@cert.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload")
           printf '%s' "$CERT_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print('certificate upload PASS')"
-          PHOTO_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" \
-            -F "requirement_id=$REQ" -F 'evidence_type=display_photo' -F 'file=@photo.png;type=image/png' \
-            "$BASE/functions/v1/phc-api/upload")
+          PHOTO_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" -F "requirement_id=$REQ" -F 'evidence_type=display_photo' -F 'file=@photo.png;type=image/png' "$BASE/functions/v1/phc-api/upload")
           printf '%s' "$PHOTO_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print('display photo upload PASS')"
 
       - name: Assert identical duplicate upload is rejected
         shell: bash
         run: |
           set -euo pipefail
-          CODE=$(curl -sS -o duplicate.json -w '%{http_code}' -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" \
-            -F "requirement_id=$REQ" -F 'evidence_type=credential_certificate' -F 'file=@cert.pdf;type=application/pdf' \
-            "$BASE/functions/v1/phc-api/upload")
+          CODE=$(curl -sS -o duplicate.json -w '%{http_code}' -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" -F "requirement_id=$REQ" -F 'evidence_type=credential_certificate' -F 'file=@cert.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload")
           test "$CODE" = "409"
-          python3 - <<'PY'
-import json
-with open('duplicate.json') as f: d=json.load(f)
-assert 'duplicate' in d.get('error','').lower(), d
-print('duplicate guard PASS')
-PY
+          python3 -c "import json; d=json.load(open('duplicate.json')); assert 'duplicate' in d.get('error','').lower(), d; print('duplicate guard PASS')"
 
       - name: Assert valid complete evidence goes to REVIEW
         shell: bash
         run: |
           set -euo pipefail
-          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' \
-            -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
+          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
           printf '%s' "$STATE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d=='REVIEW', d; print('review gate PASS')"
 
       - name: Reviewer A approves and assert READY
         shell: bash
         run: |
           set -euo pipefail
-          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
-            -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$REQ"
-          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWER_TOKEN" -H 'Content-Type: application/json' \
-            -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$REQ"
+          STATE=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWER_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$REQ\"}" "$BASE/rest/v1/rpc/sync_indicator7_state")
           printf '%s' "$STATE" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d=='READY', d; print('reviewer approval -> READY PASS')"
 
       - name: Verify read-only Inspection Room and cross-tenant isolation
         shell: bash
         run: |
           set -euo pipefail
-          INSPECT=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" \
-            "$BASE/rest/v1/inspection_indicator7?select=tenant_id,facility_requirement_id,state,review_decision,credential_evidence_count,display_photo_count&facility_requirement_id=eq.$REQ")
+          INSPECT=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/inspection_indicator7?select=tenant_id,facility_requirement_id,state,review_decision,credential_evidence_count,display_photo_count&facility_requirement_id=eq.$REQ")
           printf '%s' "$INSPECT" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; x=d[0]; assert x['tenant_id']=='10000000-0000-0000-0000-000000000001'; assert x['state']=='READY'; assert x['review_decision']=='APPROVED'; assert x['credential_evidence_count']>=2; assert x['display_photo_count']>=2; print('Inspection Room PASS')"
-          CROSS=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" \
-            "$BASE/rest/v1/inspection_indicator7?select=tenant_id&tenant_id=eq.20000000-0000-0000-0000-000000000002")
+          CROSS=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/inspection_indicator7?select=tenant_id&tenant_id=eq.20000000-0000-0000-0000-000000000002")
           printf '%s' "$CROSS" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[]; print('Inspection cross-tenant isolation PASS')"
