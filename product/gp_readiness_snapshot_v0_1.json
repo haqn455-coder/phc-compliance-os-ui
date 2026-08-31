@@ -1,0 +1,65 @@
+{
+  "config_version": "GP_READINESS_SNAPSHOT_V0_1",
+  "status": "INTERNAL_CONCIERGE_ONLY_UNTIL_PRODUCTION_PACK_RELEASE",
+  "vertical": "GP_2017",
+  "duration_minutes": {"min": 15, "max": 20},
+  "max_preview_gaps": 5,
+  "never_show_phc_score": true,
+  "never_claim_compliance_pass_fail": true,
+  "disclaimer": "Preliminary readiness snapshot for internal/presales guidance. It is not a PHC inspection score, PHC approval, legal opinion, licence decision or guaranteed inspection outcome.",
+  "cta": {
+    "name": "Founding Clinic Pilot",
+    "price_pkr": 20000,
+    "duration_days": 30,
+    "capacity": 5,
+    "copy": "Join the 30-day assisted Founding Clinic Pilot: guided onboarding, baseline setup after the production pack is released, evidence organisation support, Inspection Room preparation and 30 days of Pro access."
+  },
+  "questions": [
+    {"id":"Q01","section":"clinic_identity","label":"Clinic name","required":true,"type":"short_text"},
+    {"id":"Q02","section":"clinic_identity","label":"District / city","required":true,"type":"short_text"},
+    {"id":"Q03","section":"clinic_identity","label":"Respondent role","required":true,"type":"single_select","values":["Owner-doctor","Clinic administrator","Doctor","Reception/manager","Other"]},
+    {"id":"Q04","section":"clinic_identity","label":"Phone / WhatsApp for sending the snapshot","required":true,"type":"phone","pii":"minimum_contact_only"},
+    {"id":"Q05","section":"classification","label":"Clinic type","required":true,"type":"single_select","values":["GP","Family Physician","Single-specialty clinic","Unsure"]},
+    {"id":"Q06","section":"classification","label":"Doctors working at this site","required":true,"type":"single_select","values":["1","2–3","4+","Unsure"]},
+    {"id":"Q07","section":"classification","label":"Services actually offered","required":true,"type":"multi_select","values":["Consultation","Minor procedures","Dispensing medicines","Home visits","Other"]},
+    {"id":"Q08","section":"licence","label":"Current PHC registration / licence stage","required":true,"type":"single_select","values":["Not registered / not applied","Registered","Provisional licence","Regular licence","Unsure"]},
+    {"id":"Q09","section":"licence","label":"If a licence/registration document has an expiry or renewal date, is it known and tracked?","required":true,"type":"single_select","values":["Yes","No","Not sure","Not applicable / no date known"]},
+    {"id":"Q10","section":"credentials","label":"Are clinician/staff professional credentials and expiry evidence current and easy to retrieve?","required":true,"type":"single_select","values":["Yes","Partly","No","Not sure"]},
+    {"id":"Q11","section":"evidence","label":"How organised are PHC/MSDS documents, registers, SOPs, photos and certificates today?","required":true,"type":"single_select","values":["Organised and easy to retrieve","Partly organised","Scattered / paper folders","Not sure"]},
+    {"id":"Q12","section":"public_display","label":"Are clinic consultation hours clearly displayed?","required":true,"type":"single_select","values":["Yes","No","Not sure"]},
+    {"id":"Q13","section":"safety","label":"Does staff know what to do for fire/non-fire emergencies, with basic readiness evidence available?","required":true,"type":"single_select","values":["Yes","Partly","No","Not sure"]},
+    {"id":"Q14","section":"continuity","label":"Is an up-to-date referral contact directory available?","required":true,"type":"single_select","values":["Yes","No","Not sure"]},
+    {"id":"Q15","section":"patient_rights","label":"Is there a defined list/process for situations requiring specific informed consent?","required":true,"type":"single_select","values":["Yes","No","Not sure"]},
+    {"id":"Q16","section":"patient_rights","label":"How are patients informed about charges/costs where charges apply?","required":true,"type":"single_select","values":["Displayed/documented process","Informal only","No defined process","No charges apply","Not sure"]},
+    {"id":"Q17","section":"infection_control","label":"Are core infection-control/PPE/instrument-processing controls documented and evidenced where relevant?","required":true,"type":"single_select","values":["Yes","Partly","No","Not sure"]},
+    {"id":"Q18","section":"medicines","label":"If medicines are dispensed, is expiry checking documented?","required":false,"type":"single_select","values":["Yes","No","Not sure"],"show_if":{"question":"Q07","contains":"Dispensing medicines"}},
+    {"id":"Q19","section":"complaints","label":"Is there a written complaint/incident process and record path?","required":true,"type":"single_select","values":["Yes","Partly","No","Not sure"]}
+  ],
+  "rules": [
+    {"id":"R01","priority":100,"question":"Q08","in":["Not registered / not applied","Unsure"],"gap":"Clarify PHC registration/licence position","action":"Confirm the clinic's current registration/licence stage and collect the current supporting document before relying on any readiness plan.","evidence":"Current registration/licence document or official status evidence","safety":"flag_only_not_noncompliance"},
+    {"id":"R02","priority":95,"question":"Q10","in":["Partly","No","Not sure"],"gap":"Organise and verify clinician/staff credential evidence","action":"Create a current credential list and collect registration/qualification/expiry evidence for human verification.","evidence":"Credential list plus supporting registration/qualification documents","safety":"no_autonomous_validity_decision"},
+    {"id":"R03","priority":90,"question":"Q13","in":["Partly","No","Not sure"],"gap":"Verify emergency-readiness knowledge and evidence","action":"Run a brief staff knowledge check and gather the clinic's current emergency-readiness evidence for human review.","evidence":"Staff knowledge check / relevant readiness evidence"},
+    {"id":"R04","priority":88,"question":"Q17","in":["Partly","No","Not sure"],"gap":"Review core infection-control evidence","action":"Identify which infection-control domains apply and collect current evidence; adequacy remains a human review.","evidence":"Applicable infection-control/PPE/instrument-processing evidence","safety":"no_automated_clinical_adequacy"},
+    {"id":"R05","priority":82,"question":"Q11","in":["Partly organised","Scattered / paper folders","Not sure"],"gap":"Build one evidence index instead of searching folders during inspection preparation","action":"Create a structured evidence inventory and link each available document/register/photo to the relevant requirement.","evidence":"Existing SOPs/registers/photos/certificates inventory"},
+    {"id":"R06","priority":78,"question":"Q14","in":["No","Not sure"],"gap":"Prepare a referral contact directory","action":"Create one current referral contact directory; freshness metadata may be tracked operationally but is not presented as a separate PHC requirement.","evidence":"Referral contact directory"},
+    {"id":"R07","priority":76,"question":"Q15","in":["No","Not sure"],"gap":"Define situations requiring specific informed consent","action":"Prepare the clinic's situation list for human review; event-level consent records remain separate evidence.","evidence":"Informed-consent situation list"},
+    {"id":"R08","priority":74,"question":"Q16","in":["Informal only","No defined process","Not sure"],"gap":"Create clear evidence of how patients are informed about charges","action":"Use a valid display or documented communication process for charges, subject to human review.","evidence":"Cost-information display or documented communication evidence","safety":"no_automated_conformity"},
+    {"id":"R09","priority":72,"question":"Q18","in":["No","Not sure"],"requires":{"question":"Q07","contains":"Dispensing medicines"},"gap":"Document expiry checking for dispensed medicines","action":"Create/collect an expiry-check record for the dispensing function; no medicine selection or prescribing logic is involved.","evidence":"Expiry-check log","safety":"no_medication_selection"},
+    {"id":"R10","priority":70,"question":"Q19","in":["Partly","No","Not sure"],"gap":"Define a written complaint/incident path","action":"Set a simple acknowledgement/investigation/action/closure record path with restricted access to sensitive attachments.","evidence":"Complaint/incident register or process evidence"},
+    {"id":"R11","priority":65,"question":"Q12","in":["No","Not sure"],"gap":"Display consultation hours clearly","action":"Display current consultation hours and prepare simple visual evidence.","evidence":"Consultation-hours display evidence"}
+  ],
+  "selection": {
+    "algorithm": "evaluate_all_rules_then_sort_priority_desc_rule_id_asc_take_max_5",
+    "unknown_semantics": "VERIFY_NOT_FAIL",
+    "if_less_than_5": "return_fewer_do_not_invent",
+    "score": "NONE"
+  },
+  "one_page_output": [
+    "Header: PHC Clinic Ready — Preliminary Readiness Snapshot",
+    "Facility summary: clinic type, location, respondent, licence stage as reported",
+    "Up to five flagged readiness actions: area, observed answer, next action, evidence to prepare",
+    "Known unknowns / items requiring human verification",
+    "Scope note: this is not a full 47-indicator assessment and not a PHC score",
+    "CTA: PKR 20,000 / 30-day Founding Clinic Pilot / first five suitable clinics"
+  ]
+}
