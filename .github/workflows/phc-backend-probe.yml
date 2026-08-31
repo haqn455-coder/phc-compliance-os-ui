@@ -10,17 +10,18 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe health v6
+      - name: Probe health v7
         shell: bash
         run: |
           set -euxo pipefail
           curl -i --fail-with-body \
             -H 'Origin: https://haqn455-coder.github.io' \
             'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/health'
-      - name: Probe Owner A login v6
+      - name: Probe Owner A direct session v7
         shell: bash
         run: |
           set -euxo pipefail
-          curl -i --fail-with-body \
+          BODY=$(curl -sS --fail-with-body \
             -H 'Origin: https://haqn455-coder.github.io' \
-            'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/test-login?persona=ownerA&redirect=https%3A%2F%2Fhaqn455-coder.github.io%2Fphc-compliance-os-ui%2F'
+            'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/test-session?persona=ownerA')
+          echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; assert d.get('role')=='owner'; assert d.get('access_token'); print('direct session PASS')"
