@@ -1,0 +1,135 @@
+name: PHC Final Production Release Gate
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-final-production-release-gate.yml'
+      - 'regulatory/gp_final_release_manifest_v0_1.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  final-release-gate:
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+      KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+      ORIGIN: https://haqn455-coder.github.io
+      TENANT_A: 10000000-0000-0000-0000-000000000001
+      TENANT_B: 20000000-0000-0000-0000-000000000002
+      OK: 1,2,4,8,9,10,12,13,14,15,16,17,18,27,28,29,32,33,34,35,37,41,44,47
+      CHANGED: 5,11,20,30,42,43
+      HELD: 3,6,21,25,31,36,38,39,40,46
+      UNSUPPORTED: 23,24,26
+    steps:
+      - name: Checkout release manifest
+        uses: actions/checkout@v4
+
+      - name: Validate frozen manifest structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          d=json.load(open('regulatory/gp_final_release_manifest_v0_1.json'))
+          assert d['production_write_authorized'] is False
+          assert d['reviewed_ok_count']==24
+          assert d['reviewed_with_change_count']==6
+          assert d['reviewed_ok']==[1,2,4,8,9,10,12,13,14,15,16,17,18,27,28,29,32,33,34,35,37,41,44,47]
+          assert d['reviewed_with_change']==[5,11,20,30,42,43]
+          assert d['review_hold_existing']==[3,6,21,25,31,36,38,39,40,46]
+          assert d['unsupported_v1']==[23,24,26]
+          assert d['human_regulatory_signoff']=='REQUIRED_BEFORE_PRODUCTION'
+          print('release manifest PASS')
+          PY
+
+      - name: Obtain synthetic Owner A Viewer A Owner B sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for P in ownerA viewerA ownerB; do
+            BODY=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$P")
+            TOKEN=$(printf '%s' "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print(d['access_token'])")
+            NAME=$(printf '%s' "$P" | tr '[:lower:]' '[:upper:]')
+            echo "${NAME}_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          done
+          H=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/health")
+          printf '%s' "$H" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('version')==10,d; print('API v10 PASS')"
+
+      - name: Assert zero production-approved rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('zero production rules PASS')"
+
+      - name: Assert exactly 24 release-candidate TEST_ONLY rules are present and valid-shaped
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($OK)")
+          printf '%s' "$D" > defs.json
+          python3 -c "import json; d=json.load(open('defs.json')); assert len(d)==24,len(d); assert sorted(x['indicator_no'] for x in d)==[1,2,4,8,9,10,12,13,14,15,16,17,18,27,28,29,32,33,34,35,37,41,44,47]"
+          IDS=$(python3 -c "import json; print(','.join(x['id'] for x in json.load(open('defs.json'))))")
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=requirement_definition_id,rule_version,release_status,rule_json&requirement_definition_id=in.($IDS)&release_status=eq.TEST_ONLY")
+          printf '%s' "$R" > rules.json
+          python3 - <<'PY'
+          import json
+          rs=json.load(open('rules.json'))
+          ds=json.load(open('defs.json'))
+          ids={x['id'] for x in ds}
+          by={}
+          for r in rs: by.setdefault(r['requirement_definition_id'],[]).append(r)
+          assert ids==set(by), (len(ids),len(by))
+          for rid,rows in by.items():
+              latest=max(rows,key=lambda x:x['rule_version'])
+              q=latest['rule_json']
+              assert q.get('schema_version')==1
+              assert q.get('human_review_required') is True
+              assert isinstance(q.get('required_evidence',[]),list)
+          print('24 TEST_ONLY candidate rules PASS')
+          PY
+
+      - name: Assert REVIEWED_WITH_CHANGE rows are excluded from release candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($CHANGED)")
+          printf '%s' "$D" | python3 -c "import sys,json; d=json.load(sys.stdin); assert sorted(x['indicator_no'] for x in d)==[5,11,20,30,42,43]; print('changed rows excluded by frozen manifest PASS')"
+
+      - name: Assert held and unsupported rows have no runtime definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($HELD,$UNSUPPORTED)")
+          printf '%s' "$D" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('held/unsupported runtime exclusion PASS')"
+
+      - name: Assert non-test tenant cannot evaluate TEST_ONLY release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.1")
+          DID=$(printf '%s' "$D" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_B&requirement_definition_id=eq.$DID")
+          RID=$(printf '%s' "$F" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          test "$CODE" = "400"
+          python3 -c "import json; d=json.load(open('out.json')); assert 'no approved runtime rule' in str(d.get('message') or '').lower(),d; print('non-test TEST_ONLY block PASS')"
+
+      - name: Assert viewer denial and cross-tenant isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.1")
+          DID=$(printf '%s' "$D" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_A&requirement_definition_id=eq.$DID")
+          RID=$(printf '%s' "$F" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+          CODE=$(curl -sS -o viewer.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          test "$CODE" != "200"
+          X=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&id=eq.$RID")
+          printf '%s' "$X" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('viewer denial + cross-tenant isolation PASS')"
+
+      - name: Final no-write release verdict
+        shell: bash
+        run: |
+          echo 'MACHINE RELEASE GATE: GO WITH CONDITIONS'
+          echo 'CONDITIONS: human regulatory signoff still required; only 24 REVIEWED_OK rows eligible; production writes remain unauthorized by this workflow.'
