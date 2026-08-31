@@ -10,14 +10,14 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Probe health
+      - name: Probe health v6
         shell: bash
         run: |
           set -euxo pipefail
           curl -i --fail-with-body \
             -H 'Origin: https://haqn455-coder.github.io' \
             'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/health'
-      - name: Probe Owner A login endpoint
+      - name: Probe Owner A login v6
         shell: bash
         run: |
           set -euxo pipefail
