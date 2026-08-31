@@ -1,0 +1,56 @@
+name: PHC Remediation v2 Functional
+on:
+  push:
+    paths: ['.github/workflows/phc-remediation-v2-functional.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  functional:
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+      KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+      ORIGIN: https://haqn455-coder.github.io
+      TENANT: 10000000-0000-0000-0000-000000000001
+    steps:
+      - name: Sessions and IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for P in ownerA reviewerA; do B=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$P"); T=$(printf '%s' "$B"|python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"); N=$(printf '%s' "$P"|tr '[:lower:]' '[:upper:]'); echo "${N}_TOKEN=$T" >> "$GITHUB_ENV"; done
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.(5,11,20,30,42,43)")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id,requirement_definition_id&tenant_id=eq.$TENANT")
+          printf '%s' "$D" > defs.json; printf '%s' "$F" > frs.json
+          python3 - <<'PY' >> "$GITHUB_ENV"
+import json
+D=json.load(open('defs.json'));F=json.load(open('frs.json'));m={d['id']:d['indicator_no'] for d in D};o={m[f['requirement_definition_id']]:f['id'] for f in F if f['requirement_definition_id'] in m};assert set(o)=={5,11,20,30,42,43}
+for k,v in o.items(): print(f'I{k}={v}')
+PY
+      - name: Missing evidence -> NEEDS_ACTION
+        shell: bash
+        run: |
+          set -euo pipefail
+          for P in "5:$I5" "11:$I11" "20:$I20" "30:$I30" "42:$I42" "43:$I43"; do RID=${P#*:}; curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"applicability_reason":null,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$RID"; S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json; assert json.load(sys.stdin)=='NEEDS_ACTION'"; done
+      - name: Old evidence types are rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf bad > bad.pdf
+          for P in "$I5:consultation_schedule" "$I11:emergency_awareness_briefing" "$I30:contact_verification_record" "$I42:redacted_informed_consent_record" "$I43:fee_tariff_display"; do RID=${P%%:*}; T=${P#*:}; C=$(curl -sS -o /tmp/x -w '%{http_code}' -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNERA_TOKEN" -F "requirement_id=$RID" -F "evidence_type=$T" -F 'file=@bad.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload"); test "$C" = 400; done
+      - name: Complete evidence -> REVIEW -> READY
+        shell: bash
+        run: |
+          set -euo pipefail
+          up(){ RID=$1; T=$2; printf '%s-%s-%s' "$T" "$GITHUB_RUN_ID" "$RANDOM" > f.pdf; curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNERA_TOKEN" -F "requirement_id=$RID" -F "evidence_type=$T" -F 'file=@f.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload" >/dev/null; }
+          up "$I5" consultation_hours_display; up "$I11" staff_knowledge_check; up "$I20" service_catalogue; up "$I20" service_display_photo; up "$I30" referral_contact_directory; up "$I42" informed_consent_situation_list; up "$I43" cost_information_evidence
+          for RID in "$I5" "$I11" "$I20" "$I30" "$I42" "$I43"; do S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json; assert json.load(sys.stdin)=='REVIEW'"; curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$RID"; S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json; assert json.load(sys.stdin)=='READY'"; done
+      - name: Stale approval invalidates and N-A denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf second > second.pdf
+          curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNERA_TOKEN" -F "requirement_id=$I5" -F 'evidence_type=consultation_hours_display' -F 'file=@second.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload" >/dev/null
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=review_decision&id=eq.$I5"); printf '%s' "$R"|python3 -c "import sys,json; assert json.load(sys.stdin)[0]['review_decision']=='PENDING'"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":false,"applicability_reason":"Synthetic denial","review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I43"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I43\"}" "$BASE/rest/v1/rpc/evaluate_requirement"); printf '%s' "$S"|python3 -c "import sys,json; assert json.load(sys.stdin)=='NEEDS_ACTION'"
