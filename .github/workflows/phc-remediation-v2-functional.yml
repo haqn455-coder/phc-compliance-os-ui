@@ -22,11 +22,7 @@ jobs:
           D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.(5,11,20,30,42,43)")
           F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id,requirement_definition_id&tenant_id=eq.$TENANT")
           printf '%s' "$D" > defs.json; printf '%s' "$F" > frs.json
-          python3 - <<'PY' >> "$GITHUB_ENV"
-import json
-D=json.load(open('defs.json'));F=json.load(open('frs.json'));m={d['id']:d['indicator_no'] for d in D};o={m[f['requirement_definition_id']]:f['id'] for f in F if f['requirement_definition_id'] in m};assert set(o)=={5,11,20,30,42,43}
-for k,v in o.items(): print(f'I{k}={v}')
-PY
+          python3 -c "import json;D=json.load(open('defs.json'));F=json.load(open('frs.json'));m={d['id']:d['indicator_no'] for d in D};o={m[f['requirement_definition_id']]:f['id'] for f in F if f['requirement_definition_id'] in m};assert set(o)=={5,11,20,30,42,43};[print(f'I{k}={v}') for k,v in o.items()]" >> "$GITHUB_ENV"
       - name: Missing evidence -> NEEDS_ACTION
         shell: bash
         run: |
