@@ -1,0 +1,26 @@
+name: PHC Backend Probe
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-backend-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe health
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -i --fail-with-body \
+            -H 'Origin: https://haqn455-coder.github.io' \
+            'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/health'
+      - name: Probe Owner A login endpoint
+        shell: bash
+        run: |
+          set -euxo pipefail
+          curl -i --fail-with-body \
+            -H 'Origin: https://haqn455-coder.github.io' \
+            'https://auzbkudpqdmrgyxtwaiy.supabase.co/functions/v1/phc-api/test-login?persona=ownerA&redirect=https%3A%2F%2Fhaqn455-coder.github.io%2Fphc-compliance-os-ui%2F'
