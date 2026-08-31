@@ -60,7 +60,7 @@ jobs:
           set -euo pipefail
           CODE=$(curl -sS -o testonly.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I22B\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
           test "$CODE" = "400"
-          python3 -c "import json; d=json.load(open('testonly.json')); assert 'no approved runtime rule' in (d.get('message','')+d.get('details','')+d.get('hint','')).lower(),d; print('TEST_ONLY isolation PASS')"
+          python3 -c "import json; d=json.load(open('testonly.json')); text=' '.join(str(d.get(k) or '') for k in ('message','details','hint','code')); assert 'no approved runtime rule' in text.lower(),d; print('TEST_ONLY isolation PASS')"
 
       - name: Cross-tenant isolation remains intact
         shell: bash
