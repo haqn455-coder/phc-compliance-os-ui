@@ -1,0 +1,30 @@
+name: PHC Session RLS Probe
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-session-rls-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Owner A session and RLS data path
+        shell: bash
+        env:
+          BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+          KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+        run: |
+          set -euo pipefail
+          BODY=$(curl -sS --fail-with-body -H 'Origin: https://haqn455-coder.github.io' "$BASE/functions/v1/phc-api/test-session?persona=ownerA")
+          TOKEN=$(printf '%s' "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True and d.get('role')=='owner' and d.get('access_token'); print(d['access_token'])")
+          USER_ID=$(printf '%s' "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['user_id'])")
+          MEMBERSHIP=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $TOKEN" "$BASE/rest/v1/memberships?select=tenant_id,role&user_id=eq.$USER_ID")
+          printf '%s' "$MEMBERSHIP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; assert d[0]['tenant_id']=='10000000-0000-0000-0000-000000000001'; assert d[0]['role']=='owner'; print('membership PASS')"
+          FACILITY=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $TOKEN" "$BASE/rest/v1/facilities?select=id,name,tenant_id&tenant_id=eq.10000000-0000-0000-0000-000000000001")
+          printf '%s' "$FACILITY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)>=1; assert all(x['tenant_id']=='10000000-0000-0000-0000-000000000001' for x in d); print('facility PASS')"
+          REQ=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $TOKEN" "$BASE/rest/v1/facility_requirements?select=id,state,review_decision,tenant_id,requirement_definition_id&tenant_id=eq.10000000-0000-0000-0000-000000000001")
+          printf '%s' "$REQ" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)>=1; assert all(x['tenant_id']=='10000000-0000-0000-0000-000000000001' for x in d); print('requirement PASS')"
+          CROSS=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $TOKEN" "$BASE/rest/v1/facilities?select=id,tenant_id&tenant_id=eq.20000000-0000-0000-0000-000000000002")
+          printf '%s' "$CROSS" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[]; print('cross-tenant isolation PASS')"
