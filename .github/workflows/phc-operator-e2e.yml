@@ -46,8 +46,9 @@ jobs:
         run: |
           set -euo pipefail
           curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"expiry_date":"2028-12-31","renewal_in_progress":false}' "$BASE/rest/v1/credentials?id=eq.$CRED_ID"
-          printf 'synthetic-certificate-%s' "$GITHUB_RUN_ID" > cert.pdf
-          printf 'synthetic-display-photo-%s' "$GITHUB_RUN_ID" > photo.png
+          UNIQUE="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA}"
+          printf 'synthetic-certificate-%s' "$UNIQUE" > cert.pdf
+          printf 'synthetic-display-photo-%s' "$UNIQUE" > photo.png
           CERT_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" -F "requirement_id=$REQ" -F 'evidence_type=credential_certificate' -F 'file=@cert.pdf;type=application/pdf' "$BASE/functions/v1/phc-api/upload")
           printf '%s' "$CERT_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print('certificate upload PASS')"
           PHOTO_RESP=$(curl -sS --fail-with-body -X POST -H "Origin: $ORIGIN" -H "Authorization: Bearer $OWNER_TOKEN" -F "requirement_id=$REQ" -F 'evidence_type=display_photo' -F 'file=@photo.png;type=image/png' "$BASE/functions/v1/phc-api/upload")
