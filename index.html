@@ -4,7 +4,7 @@ const KEY='sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw';
 const API=URL+'/functions/v1/phc-api';
 const R=URL+'/rest/v1/';
 const A=s=>document.querySelector(s);let x={},TOKEN='';
-const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
+const h=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function note(m,k='n'){const n=A('#note');if(n){n.className=k;n.textContent=m}}
 function decodeSub(t){try{let p=t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');p+='='.repeat((4-p.length%4)%4);return JSON.parse(atob(p)).sub}catch{return''}}
 function captureToken(){TOKEN=localStorage.getItem('phc_token')||''}
