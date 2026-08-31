@@ -31,21 +31,21 @@ jobs:
         run: |
           set -euo pipefail
           BODY=$(python3 - <<'PY'
-import json,os
-print(json.dumps({
-  'tenant_id':os.environ['TENANT_A'],
-  'snapshot_version':'GP_READINESS_SNAPSHOT_V0_1',
-  'clinic_name':'CI Snapshot '+os.environ['GITHUB_RUN_ID'],
-  'district_city':'Layyah',
-  'respondent_role':'Owner-doctor',
-  'contact':'03000000000',
-  'answers':{'Q01':'CI Snapshot','Q02':'Layyah','Q03':'Owner-doctor','Q04':'03000000000','Q05':'GP','Q07':['Consultation']},
-  'triggered_rule_ids':['R01','R02'],
-  'lead_status':'SNAPSHOT_CREATED',
-  'pilot_status':'WAITLIST_UNTIL_PRODUCTION_PACK'
-}))
-PY
-)
+          import json,os
+          print(json.dumps({
+            'tenant_id':os.environ['TENANT_A'],
+            'snapshot_version':'GP_READINESS_SNAPSHOT_V0_1',
+            'clinic_name':'CI Snapshot '+os.environ['GITHUB_RUN_ID'],
+            'district_city':'Layyah',
+            'respondent_role':'Owner-doctor',
+            'contact':'03000000000',
+            'answers':{'Q01':'CI Snapshot','Q02':'Layyah','Q03':'Owner-doctor','Q04':'03000000000','Q05':'GP','Q07':['Consultation']},
+            'triggered_rule_ids':['R01','R02'],
+            'lead_status':'SNAPSHOT_CREATED',
+            'pilot_status':'WAITLIST_UNTIL_PRODUCTION_PACK'
+          }))
+          PY
+          )
           R=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=representation' -d "$BODY" "$BASE/rest/v1/presales_snapshots")
           ID=$(printf '%s' "$R" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; x=d[0]; assert set(x['answers']).issubset({'Q01','Q02','Q03','Q04','Q05','Q06','Q07','Q08','Q09','Q10','Q11','Q12','Q13','Q14','Q15','Q16','Q17','Q18','Q19'}); assert len(x['triggered_rule_ids'])<=5; print(x['id'])")
           echo "SNAP_ID=$ID" >> "$GITHUB_ENV"
