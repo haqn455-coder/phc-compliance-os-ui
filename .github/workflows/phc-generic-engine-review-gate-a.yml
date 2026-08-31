@@ -1,0 +1,70 @@
+name: PHC Generic Engine Review Gate A
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-generic-engine-review-gate-a.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review-gate-a:
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+      KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+      ORIGIN: https://haqn455-coder.github.io
+      TENANT_A: 10000000-0000-0000-0000-000000000001
+      TENANT_B: 20000000-0000-0000-0000-000000000002
+    steps:
+      - name: Obtain Owner A Reviewer A Owner B sessions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for P in ownerA reviewerA ownerB; do
+            BODY=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$P")
+            TOKEN=$(printf '%s' "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print(d['access_token'])")
+            NAME=$(printf '%s' "$P" | tr '[:lower:]' '[:upper:]')
+            echo "${NAME}_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          done
+          echo 'sessions PASS'
+
+      - name: Discover Indicator 22 requirements per tenant
+        shell: bash
+        run: |
+          set -euo pipefail
+          DEF=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.22")
+          DID=$(printf '%s' "$DEF" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          A=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_A&requirement_definition_id=eq.$DID")
+          B=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_B&requirement_definition_id=eq.$DID")
+          I22A=$(printf '%s' "$A" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          I22B=$(printf '%s' "$B" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          echo "I22A=$I22A" >> "$GITHUB_ENV"
+          echo "I22B=$I22B" >> "$GITHUB_ENV"
+          echo 'tenant-local discovery PASS'
+
+      - name: N/A requires reason and independent human review
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":false,"applicability_reason":"Synthetic Gate A: specialized equipment not portrayed","review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I22A"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I22A\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          printf '%s' "$S" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d=='REVIEW',d; print('N/A pending review PASS')"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"review_decision":"APPROVED"}' "$BASE/rest/v1/facility_requirements?id=eq.$I22A"
+          S=$(curl -sS --fail-with-body -X POST -H "apikey: $KEY" -H "Authorization: Bearer $REVIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I22A\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          printf '%s' "$S" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d=='NOT_APPLICABLE',d; print('reviewer-approved N/A PASS')"
+          curl -sS --fail-with-body -X PATCH -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -H 'Prefer: return=minimal' -d '{"applicable":true,"applicability_reason":null,"review_decision":"PENDING"}' "$BASE/rest/v1/facility_requirements?id=eq.$I22A"
+
+      - name: TEST_ONLY rule is blocked for non-test tenant
+        shell: bash
+        run: |
+          set -euo pipefail
+          CODE=$(curl -sS -o testonly.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$I22B\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          test "$CODE" = "400"
+          python3 -c "import json; d=json.load(open('testonly.json')); assert 'no approved runtime rule' in (d.get('message','')+d.get('details','')+d.get('hint','')).lower(),d; print('TEST_ONLY isolation PASS')"
+
+      - name: Cross-tenant isolation remains intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          X=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&id=eq.$I22A")
+          printf '%s' "$X" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('cross-tenant isolation PASS')"
