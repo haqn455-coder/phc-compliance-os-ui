@@ -41,7 +41,7 @@ async function reopenSnapshot(id){
 async function snapshotStatusMode(id){
   if(!['owner','manager'].includes(x.m.role))return note('Operator access required','n e');
   try{
-    const rows=await rest('presales_snapshots?select=id,clinic_name,lead_status,pilot_status&is_test=is.null&id=eq.'+encodeURIComponent(id)+'&tenant_id=eq.'+x.m.tenant_id+'&limit=1').catch(()=>rest('presales_snapshots?select=id,clinic_name,lead_status,pilot_status&id=eq.'+encodeURIComponent(id)+'&tenant_id=eq.'+x.m.tenant_id+'&limit=1'));
+    const rows=await rest('presales_snapshots?select=id,clinic_name,lead_status,pilot_status&id=eq.'+encodeURIComponent(id)+'&tenant_id=eq.'+x.m.tenant_id+'&limit=1');
     if(!rows.length)throw Error('Snapshot not found or not accessible');
     const row=rows[0];
     document.querySelector('#app').innerHTML=`<div class=s><div class=c><div class=badge>INTERNAL OPERATOR ONLY</div><h2>Update Snapshot status</h2><p><b>${h(row.clinic_name)}</b></p><div class=warn>Snapshot answers, preview rules, creator and clinic identity are immutable. This screen changes workflow status only.</div><label class=f>Lead status<select id=leadstatus>${statusOptions(SNAP_LEAD_STATUSES,row.lead_status)}</select></label><label class=f>Pilot status<select id=pilotstatus>${statusOptions(SNAP_PILOT_STATUSES,row.pilot_status)}</select></label><p class=mut>Paid/active pilot states remain unavailable until the production GP pack is released.</p><div class=toolbar><button id=statback class="b b2" type=button>Cancel</button><button id=statsave class=b type=button>Save status</button></div><div id=note class=n>Status changes are audited.</div></div></div>`;
