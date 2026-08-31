@@ -5,6 +5,9 @@ on:
       - 'product/gp_readiness_snapshot_v0_1.json'
       - 'product/gp_readiness_snapshot_eval.mjs'
       - 'product/gp_readiness_snapshot_eval.test.mjs'
+      - 'product/gp_snapshot_form_logic.mjs'
+      - 'product/gp_snapshot_form_logic.test.mjs'
+      - 'index.html'
       - '.github/workflows/phc-gp-readiness-snapshot-test.yml'
   workflow_dispatch:
 permissions:
@@ -17,5 +20,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Run deterministic snapshot tests
+      - name: Run deterministic snapshot evaluator tests
         run: node product/gp_readiness_snapshot_eval.test.mjs
+      - name: Run snapshot form and privacy tests
+        run: node product/gp_snapshot_form_logic.test.mjs
