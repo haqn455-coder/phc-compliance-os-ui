@@ -15,8 +15,10 @@ const ui=fs.readFileSync(new URL('./gp_snapshot_ops_ui.js',import.meta.url),'utf
 const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 assert.match(ui,/Snapshot Operations/);
 assert.match(ui,/Reopen \/ Reprint/);
-assert.match(ui,/const patch=\{lead_status:.*pilot_status:/s);
-assert.doesNotMatch(ui,/PATCH[^\n]+answers/s);
+const patchSource=ui.match(/const patch=\{[^}]+\}/s)?.[0]||'';
+assert.match(patchSource,/lead_status:/);
+assert.match(patchSource,/pilot_status:/);
+assert.doesNotMatch(patchSource,/answers|triggered_rule_ids|clinic_name|contact|tenant_id/);
 assert.match(ui,/Snapshot answers, preview rules, creator and clinic identity are immutable/);
 assert.doesNotMatch(ui,/PILOT_OFFERED','PILOT_ACCEPTED/);
 assert.match(html,/gp_snapshot_ops_ui\.js/);
