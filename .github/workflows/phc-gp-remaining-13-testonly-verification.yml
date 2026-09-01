@@ -1,0 +1,84 @@
+name: PHC GP Remaining 13 TEST_ONLY Verification
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-gp-remaining-13-testonly-verification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-remaining-13:
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+      KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+      ORIGIN: https://haqn455-coder.github.io
+      SET13: 3,6,21,23,24,25,26,31,36,38,39,40,46
+    steps:
+      - name: Obtain owner test session and API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          B=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=ownerA")
+          T=$(printf '%s' "$B" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print(d['access_token'])")
+          echo "OWNER_TOKEN=$T" >> "$GITHUB_ENV"
+          H=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/health")
+          printf '%s' "$H" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('version')==10,d; print('API health PASS')"
+
+      - name: Assert exact 13 definitions and TEST_ONLY v1 rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($SET13)")
+          printf '%s' "$D" > defs13.json
+          python3 - <<'PY'
+          import json
+          expected=[3,6,21,23,24,25,26,31,36,38,39,40,46]
+          d=json.load(open('defs13.json'))
+          got=sorted(x['indicator_no'] for x in d)
+          assert got==expected,(got,expected)
+          print('exact 13 definitions PASS')
+          PY
+          IDS=$(python3 -c "import json; print(','.join(x['id'] for x in json.load(open('defs13.json'))))")
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=requirement_definition_id,rule_version,release_status,rule_json,source_contract,source_version,review_note&requirement_definition_id=in.($IDS)&release_status=eq.TEST_ONLY")
+          printf '%s' "$R" > rules13.json
+          python3 - <<'PY'
+          import json
+          defs=json.load(open('defs13.json')); rows=json.load(open('rules13.json'))
+          num={x['id']:x['indicator_no'] for x in defs}
+          assert len(rows)==13,len(rows)
+          seen=[]
+          for r in rows:
+              ind=num[r['requirement_definition_id']]
+              seen.append(ind)
+              assert r['rule_version']==1,(ind,r['rule_version'])
+              assert r['release_status']=='TEST_ONLY'
+              assert r['rule_json'].get('schema_version')==1
+              assert r['rule_json'].get('human_review_required') is True
+              assert r['source_contract'] and r['source_version'] and r['review_note']
+          assert sorted(seen)==[3,6,21,23,24,25,26,31,36,38,39,40,46]
+          print('13 TEST_ONLY contracts PASS')
+          PY
+
+      - name: Assert none of the 13 is promoted
+        shell: bash
+        run: |
+          set -euo pipefail
+          IDS=$(python3 -c "import json; print(','.join(x['id'] for x in json.load(open('defs13.json'))))")
+          P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&requirement_definition_id=in.($IDS)&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$P" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('13 production exclusion PASS')"
+
+      - name: Assert production remains exact count 29 and Indicator 20 remains held
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$P" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==29,len(d); print('production count 29 PASS')"
+          D20=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.20")
+          I20=$(printf '%s' "$D20" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          P20=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNER_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&requirement_definition_id=eq.$I20&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$P20" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d==[],d; print('Indicator 20 SOURCE HOLD PASS')"
+
+      - name: Final verdict
+        run: |
+          echo 'PASS: remaining 13 GP rules are TEST_ONLY, human-review controlled, and unpromoted; production remains 29.'
