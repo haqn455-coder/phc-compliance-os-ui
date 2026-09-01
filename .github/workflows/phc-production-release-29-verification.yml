@@ -1,0 +1,127 @@
+name: PHC GP Production Release 29 Verification
+on:
+  push:
+    paths:
+      - '.github/workflows/phc-production-release-29-verification.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production-release-29:
+    runs-on: ubuntu-latest
+    env:
+      BASE: https://auzbkudpqdmrgyxtwaiy.supabase.co
+      KEY: sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw
+      ORIGIN: https://haqn455-coder.github.io
+      TENANT_A: 10000000-0000-0000-0000-000000000001
+      TENANT_B: 20000000-0000-0000-0000-000000000002
+      PROD: 1,2,4,5,8,9,10,11,12,13,14,15,16,17,18,27,28,29,30,32,33,34,35,37,41,42,43,44,47
+      HELD: 3,6,21,23,24,25,26,31,36,38,39,40,46
+    steps:
+      - name: Obtain synthetic sessions and API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          for P in ownerA viewerA ownerB; do
+            B=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/test-session?persona=$P")
+            T=$(printf '%s' "$B" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('ok') is True; print(d['access_token'])")
+            N=$(printf '%s' "$P" | tr '[:lower:]' '[:upper:]')
+            echo "${N}_TOKEN=$T" >> "$GITHUB_ENV"
+          done
+          H=$(curl -sS --fail-with-body -H "Origin: $ORIGIN" "$BASE/functions/v1/phc-api/health")
+          printf '%s' "$H" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('version')==10"
+      - name: Assert exact 29 production indicator set
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id,indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($PROD)")
+          printf '%s' "$D" > defs.json
+          python3 - <<'PY'
+          import json
+          expected=[1,2,4,5,8,9,10,11,12,13,14,15,16,17,18,27,28,29,30,32,33,34,35,37,41,42,43,44,47]
+          d=json.load(open('defs.json'))
+          assert sorted(x['indicator_no'] for x in d)==expected, sorted(x['indicator_no'] for x in d)
+          print('29 production definitions PASS')
+          PY
+          IDS=$(python3 -c "import json;print(','.join(x['id'] for x in json.load(open('defs.json'))))")
+          R=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id,requirement_definition_id,rule_version,release_status,rule_json,source_contract,source_version,human_reviewer_identity,human_review_date,source_test_rule_id,source_test_rule_version,source_rule_sha256,approved_at&requirement_definition_id=in.($IDS)&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$R" > prod.json
+          python3 - <<'PY'
+          import json
+          defs=json.load(open('defs.json')); rows=json.load(open('prod.json'))
+          num={x['id']:x['indicator_no'] for x in defs}
+          assert len(rows)==29, len(rows)
+          expected_v3={5,11,30,42,43}
+          expected_hash={
+          1:'42ec295f5b3f2a945c1741d5d5f7e5bcbd5e5057efb9ae65f1f4c3fcf8638008',2:'def7ebaeee162ee013875fee35395949c498d88a2fbd92287a54898f94a988f9',4:'8334531804b7e89a5d129eb9b308a7ba13fb5732c1faefce57a4eead5953bfad',5:'ef5d23dbd0406346e9fdd01040cdc5c7e34fa156cb1c09159b84ec590f1a6b4e',8:'3b0021ae6ac85f120ab8f2a001037c180487a904cae00280dd5c95191467dd05',9:'b054362bd28ea6483bb093c12bfde95557814f9e62802fcb382e3e53ccdbdbdf',10:'7a89edf807e3e8c713f08c9f7bba3287cac173a595e211e65d1be7adeb5b8141',11:'2c3fe15b775f555f0ae91149621046bc560c93b7386cfd4ff6a41fc89546f380',12:'5abda7564d507c14477388b3c3eb5069bec8cb0748065dd54d582f1336888e6f',13:'45117a51fbfaf1f81d9ed9fbe80bb228d04822c6fb70d00c21d3df323e9b682b',14:'0e7e4a1c375849679fa1f5a03d31cf953e769ae1ff248aa0f2eabd686c12c2a7',15:'0a824fbabe50cd29cd9166b5c269a4f4d7264970883b5bede46c197813149e96',16:'8aa7a71973ffc5f1729b8210c4ca436c5d2940a10cbad3f43747f57f7382fd3a',17:'ebbb84948f3be1be59974a724188381c5df1fbdd81602dc0122301bfdb8934c8',18:'4b243b2da5f8a636c7ab3c4932de670bf84f6d2ee75697f01c69aa71594f02da',27:'9aaa542b6d0a7d753229c4f80cad38aa69a0eb18d391da62f5d670511aa2e6b7',28:'5823dbe25bf90bd017dfc425db18f4e84e434bd8893a08f196f2c2174eb910e9',29:'a0203aaa80e89618e2a0ba7d3f77b69d2fd6c8fde6aee89e61a25310e34ac4b9',30:'4b082d06637f769f407b0ca5b4fd89645cfbfa5294e98722f264e90de41e0ab6',32:'aae790a7290fba7874d51d8cebfd37a819eca160ddcfc083c2b7df68651b209c',33:'e14df600ebb8ed64fb9bdd7855c487585ae82a4081ef593efe61232addd4de0a',34:'a7db286f8cab654e0022d28118f7a57be3ef9ea58d4f1f9a733ca419a2af5a2d',35:'8df555b571830c40b0a5dbbab9b0d5a10670faab756fa54f449960163953d5b5',37:'a75c4dfa3d19cb5d419159e4271d8363fb04e089b8bee130f092f19883fa4e2b',41:'7f679243a4f138e5b0d3e6af0160762896ee0fc53c8a28e5fa2d2c5d5c80f805',42:'28fa239668910b1b502a2d6bae1c98101f30d108e99982984a9007091ef01ee3',43:'748e622395fa4181cb61b0b30ce79661b284c95e83582cf95ee12576251392d5',44:'7bf3a7e6dde13fb81787e4355ee45acd0af2087583196c4cc3564055d8f0ad61',47:'5192c722966d8e16ae2439d1c23debf0d9e318aa5a378efe63c8b5d5975ff658'}
+          for r in rows:
+              ind=num[r['requirement_definition_id']]
+              assert r['rule_version']==(3 if ind in expected_v3 else 2),(ind,r['rule_version'])
+              assert r['release_status']=='APPROVED_FOR_PRODUCTION'
+              assert r['human_reviewer_identity']=='Dr. Haq Nawaz'
+              assert r['human_review_date']=='2026-08-31'
+              assert r['source_test_rule_id'] and r['source_test_rule_version'] in (1,2)
+              assert r['source_rule_sha256']==expected_hash[ind],(ind,r['source_rule_sha256'])
+              assert r['approved_at']
+              assert r['rule_json'].get('human_review_required') is True
+          print('29 production provenance PASS')
+          PY
+      - name: Assert source TEST_ONLY rows still match production provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          IDS=$(python3 -c "import json;print(','.join(r['source_test_rule_id'] for r in json.load(open('prod.json'))))")
+          S=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id,requirement_definition_id,rule_version,release_status,rule_json,source_contract,source_version&id=in.($IDS)")
+          printf '%s' "$S" > src.json
+          python3 - <<'PY'
+          import json
+          prod=json.load(open('prod.json')); src=json.load(open('src.json')); by={x['id']:x for x in src}
+          assert len(src)==29
+          for p in prod:
+              s=by[p['source_test_rule_id']]
+              assert s['release_status']=='TEST_ONLY'
+              assert s['requirement_definition_id']==p['requirement_definition_id']
+              assert s['rule_version']==p['source_test_rule_version']
+              assert p['rule_version']==s['rule_version']+1
+              assert s['rule_json']==p['rule_json']
+              assert s['source_contract']==p['source_contract'] and s['source_version']==p['source_version']
+          print('production-to-TEST_ONLY provenance linkage PASS')
+          PY
+      - name: Assert Indicator 20 and held unsupported remain unpromoted
+        shell: bash
+        run: |
+          set -euo pipefail
+          D20=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.20")
+          ID20=$(printf '%s' "$D20" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          P20=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&requirement_definition_id=eq.$ID20&release_status=eq.APPROVED_FOR_PRODUCTION")
+          printf '%s' "$P20" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]; print('Indicator 20 production HOLD PASS')"
+          H=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=indicator_no&vertical_code=eq.GP_2017&indicator_no=in.($HELD)")
+          printf '%s' "$H" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]; print('REVIEW/UNSUPPORTED runtime exclusion PASS')"
+      - name: Assert non-test tenant resolves approved production rule
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.5")
+          DID=$(printf '%s' "$D" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_B&requirement_definition_id=eq.$DID")
+          RID=$(printf '%s' "$F" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d)==1; print(d[0]['id'])")
+          C=$(curl -sS -o eval.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          test "$C" = "200"
+          echo 'non-test approved production resolution PASS'
+      - name: Assert viewer denial and cross-tenant isolation remain intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_definitions?select=id&vertical_code=eq.GP_2017&indicator_no=eq.1")
+          DID=$(printf '%s' "$D" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+          F=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&tenant_id=eq.$TENANT_A&requirement_definition_id=eq.$DID")
+          RID=$(printf '%s' "$F" | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['id'])")
+          C=$(curl -sS -o viewer.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $VIEWERA_TOKEN" -H 'Content-Type: application/json' -d "{\"target_requirement\":\"$RID\"}" "$BASE/rest/v1/rpc/evaluate_requirement")
+          test "$C" != "200"
+          X=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERB_TOKEN" "$BASE/rest/v1/facility_requirements?select=id&id=eq.$RID")
+          printf '%s' "$X" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
+          echo 'viewer/cross-tenant guards PASS'
+      - name: Final post-release verdict
+        run: |
+          echo 'PRODUCTION RELEASE VERIFIED: EXACT 29 GP RULES'
+          echo 'Indicator 20 remains SOURCE HOLD. REVIEW/UNSUPPORTED remain outside runtime.'
