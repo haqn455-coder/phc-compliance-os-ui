@@ -1,0 +1,63 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Apply Founder Baseline</title><style>body{font-family:system-ui,sans-serif;background:#f4f7fb;color:#17212b;margin:0;padding:24px}.card{max-width:680px;margin:12vh auto;background:#fff;border:1px solid #dce5ef;border-radius:16px;padding:20px;box-shadow:0 2px 12px rgba(20,40,70,.06)}.ok{background:#eaf7ee;border:1px solid #cce7d3;border-radius:10px;padding:12px}.mut{color:#627180;font-size:14px}</style></head><body><div class="card"><h2>PHC Compliance OS — Founder Baseline</h2><div id="msg" class="ok">Applying verified baseline to empty fields only…</div><p class="mut">Existing founder entries are preserved. No review checkbox is auto-approved. No patient-identifiable data is added.</p></div><script>
+const LS='phc_founder_real_v01';
+const BASELINE={
+1:{note:'Exterior clinic signboard evidence exists; confirm that the current displayed sign includes the required clinic identity and PM&DC registration number before founder review.'},
+2:{situation:'YES',note:'Founder signoff 02-Sep-2026 accepted current access evidence. Re-check actual entrance/access in this pilot before final review.'},
+3:{situation:'YES',note:'PHC Registration Certificate R-26045 dated 11-Dec-2015 is documented. Current regular/provisional licence number, validity and renewal status remain pending written PHC clarification.'},
+4:{note:'Doctor identity/qualification wording is controlled; current door-plate display photo still requires founder visual confirmation.'},
+5:{situation:'YES',note:'Current recorded hours: Mon-Sat 4:00 PM-9:00 PM; Sun 9:00 AM-2:00 PM and 4:00 PM-8:00 PM. Confirm current display photo.'},
+6:{situation:'YES',note:'PHC Clinic Manager / Person-in-Charge is Dr Haq Nawaz Khosa. Founder signoff completed; primary PM&DC credential cross-check remains a preserved evidence gate.'},
+7:{note:'PM&DC registration data is on record, but current displayed-certificate evidence should be visually confirmed before review.'},
+8:{situation:'YES',note:'Founder signoff 02-Sep-2026 accepted current premises evidence; re-review actual clinic evidence in this pilot.'},
+9:{situation:'YES',note:'Founder signoff 02-Sep-2026 accepted current patient-comfort evidence; re-review actual clinic condition.'},
+10:{situation:'YES',note:'Founder signoff 02-Sep-2026 accepted current privacy arrangements; re-review actual consultation/examination privacy.'},
+11:{note:'Emergency/fire staff briefing and knowledge check remain a real-clinic human evidence item.'},
+12:{situation:'YES',note:'Fire-extinguisher photo received with test/expiry marking visible. Full emergency inventory/function check and staff-use briefing remain human-review items.'},
+13:{situation:'YES',note:'Restricted staff credential files are maintained. Qualification evidence exists for multiple staff; regulated authorization remains separately human-verified where applicable.'},
+14:{situation:'YES',note:'Staff JD pack exists. Confirm actual performance-evaluation records against JDs before final review.'},
+15:{situation:'YES',note:'Clinic AI canonical record uses unique Case ID. One genuine founder-clinic shift/redacted sample should confirm real-use traceability.'},
+16:{situation:'YES',note:'Role/authorization matrix exists; one genuine shift should confirm that actual record entries are traceable to authorized users.'},
+17:{situation:'YES',note:'Founder signoff 02-Sep-2026 approved current QA process evidence.'},
+18:{situation:'YES',note:'Founder signoff 02-Sep-2026 approved current QI process evidence.'},
+19:{situation:'YES',note:'Founder signoff 02-Sep-2026 approved sentinel-event list/process evidence. Do not manufacture an event record.'},
+20:{situation:'YES',note:'Actual service/fee material has been prepared, but Indicator 20 remains MANUAL REGULATORY REVIEW because the operative PM&DC Code source is under written clarification.'},
+21:{situation:'YES',scope:'YES',note:'Gynecology OPD is active. Phototherapy, emergency suction and gastric wash/stomach aspirate have also been founder-declared. Provider credentials, service conformity and facility scope require human review. SVD/delivery remains FUTURE / REGULATORY HOLD.'},
+22:{situation:'YES',scope:'YES',note:'Specialized/emergency equipment is used or portrayed (including oxygen/phototherapy-related capability). Complete actual equipment inventory, responsibility and maintenance/function evidence before review.'},
+23:{note:'Current model is external-lab coordination/sample workflow; exact on-site sample collection versus off-site referral/coordination still requires founder factual confirmation and PHC scope clarification.'},
+24:{situation:'YES',scope:'NO',note:'Radiology/imaging diagnostic service is not provided or portrayed on-site. Founder signoff 02-Sep-2026 approved this scope fact.'},
+25:{situation:'YES',note:'Health-education posters/material were evidenced in clinic photos and founder signoff 02-Sep-2026 approved the current process evidence.'},
+27:{situation:'YES',note:'Registration/guidance SOP and digital workflow exist; one genuine clinic shift should confirm actual use.'},
+28:{situation:'YES',note:'Clinical-record workflow exists; final evidence should use a redacted genuine founder-clinic record, not synthetic patient data.'},
+29:{situation:'YES',note:'Referral SOP is present and founder signoff 02-Sep-2026 approved current process evidence. Add a redacted referral only if one genuinely occurs.'},
+30:{situation:'YES',note:'Emergency/referral directory exists and founder signoff 02-Sep-2026 approved current evidence; local medico-legal focal-contact gap remains preserved.'},
+31:{situation:'YES',note:'Oxygen/fire/emergency arrangements have partial evidence. Complete actual emergency inventory/function check and staff briefing before final review.'},
+33:{situation:'YES',note:'Prescription standards/process are configured; verify on one genuine redacted prescription/record sample.'},
+34:{situation:'YES',note:'Prescription structure requirement is applicable; verify date/time/name/signature/legibility on one genuine redacted sample.'},
+35:{situation:'YES',note:'Prescription issue process is applicable; verify on one genuine clinic shift.'},
+36:{situation:'YES',scope:'YES',note:'Medicines are stored at the clinic. Physical storage, temperature where applicable, batch/expiry and quarantine controls require actual evidence.'},
+37:{situation:'YES',note:'Expiry-control register/process exists; verify actual stock/expiry check in the real clinic.'},
+38:{situation:'YES',scope:'YES',note:'Medicines are dispensed at the clinic. Labelling evidence must come from a compliant real process; do not infer compliance from stock presence.'},
+39:{situation:'YES',scope:'YES',note:'Dispensing occurs. Staff qualification evidence exists, but legal/current dispensing authorization remains AUTHORIZATION REVIEW HOLD and must not be inferred.'},
+40:{situation:'YES',note:'ADR reporting process evidence was founder-approved 02-Sep-2026. Add an ADR report only if an ADR genuinely occurs.'},
+41:{situation:'YES',note:'Consent process is applicable; verify actual clinician practice/redacted evidence in a genuine shift where appropriate.'},
+42:{situation:'YES',note:'Specific informed-consent situation list was founder-approved 02-Sep-2026. Add event evidence only if a relevant event genuinely occurs.'},
+43:{note:'Current fee master and Noticeboard Print Pack v0.3 are prepared. Physical display/cost-communication evidence still needs founder visual confirmation.'},
+44:{situation:'YES',note:'Treatment-refusal process was founder-approved 02-Sep-2026. Add refusal/LAMA evidence only if a refusal genuinely occurs.'},
+45:{note:'Complaint mechanism/process is prepared; confirm current patient-facing display and real operational access before review.'},
+46:{note:'PHC Rights Charter print/display pack is prepared; current physical display photo remains pending.'},
+47:{note:'Infection-control SOP/process pack exists; actual hand hygiene, cleaning/disinfection, sharps, waste segregation, PPE and safe-injection implementation remain physical human-review evidence.'}
+};
+let state={};try{state=JSON.parse(localStorage.getItem(LS)||'{}')||{}}catch(e){state={}};
+let fields=0,indicators=0;
+for(const [k,v] of Object.entries(BASELINE)){
+  const old=state[k]||{};let changed=false;
+  for(const [field,val] of Object.entries(v)){
+    if((old[field]===undefined||old[field]===null||old[field]==='')&&val!=='') {old[field]=val;fields++;changed=true;}
+  }
+  if(changed){old.prefill_source='P01 verified Drive/GitHub baseline — 04-Sep-2026';old.prefilled_at=new Date().toISOString();state[k]=old;indicators++;}
+}
+state._baseline={version:'P01-2026-09-04-v1',applied_at:new Date().toISOString(),policy:'empty-fields-only; no auto-review; no PHI'};
+localStorage.setItem(LS,JSON.stringify(state));
+document.getElementById('msg').textContent=`Baseline applied: ${indicators} indicator records updated, ${fields} empty fields filled. Redirecting to founder pilot…`;
+setTimeout(()=>location.replace('./founder-clinic-pilot.html'),1200);
+</script></body></html>
