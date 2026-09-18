@@ -19,6 +19,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck and build Master Cockpit
+        run: npm run build
+      - name: Preserve legacy and clinic routes
+        run: |
+          for f in apply-founder-baseline.html clinic.html founder-clinic-pilot.html founder-export.html founder-pilot.html friend-demo.html legacy-console.html p01-login.html p01-owner.html pilot-admin.html pilot-request.html robots.txt; do
+            if [ -f "$f" ]; then cp "$f" dist/; fi
+          done
+          for d in product persistence regulatory; do
+            if [ -d "$d" ]; then cp -R "$d" dist/; fi
+          done
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
@@ -26,7 +42,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: dist
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
