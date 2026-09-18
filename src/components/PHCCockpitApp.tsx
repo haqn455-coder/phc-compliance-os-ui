@@ -63,7 +63,7 @@ export default function PHCCockpitApp(){
  const [dailyRoutine,setDailyRoutine]=useState<any>(null);
 
  const note=useCallback((m:string)=>{setToast(m);setTimeout(()=>setToast(''),2800)},[]);
- useEffect(()=>{(async()=>{const r=await supabase.auth.getSession();setSession(r.data.session);if(r.data.session){const a=await supabase.from('platform_admins').select('user_id').eq('user_id',r.data.session.user.id).maybeSingle();setAdmin(!!a.data)}setChecked(true)})();const x=supabase.auth.onAuthStateChange((_e,s)=>setSession(s));return()=>x.data.subscription.unsubscribe()},[]);
+ useEffect(()=>{let alive=true;const apply=async(s:Session|null)=>{if(!alive)return;setSession(s);setChecked(true);if(!s){setAdmin(false);return}try{const lookup=supabase.from('platform_admins').select('user_id').eq('user_id',s.user.id).maybeSingle();const timeout=new Promise<null>(resolve=>setTimeout(()=>resolve(null),7000));const a:any=await Promise.race([lookup,timeout]);if(alive)setAdmin(!!a?.data)}catch{if(alive)setAdmin(false)}};void supabase.auth.getSession().then(r=>apply(r.data.session));const x=supabase.auth.onAuthStateChange((_e,s)=>{void apply(s)});return()=>{alive=false;x.data.subscription.unsubscribe()}},[]);
  const api=useCallback(async(path:string,opt:any={})=>{const s=session||(await supabase.auth.getSession()).data.session;if(!s)throw Error('Founder/admin login required.');const r=await fetch(PILOT_API+path,{...opt,headers:{'content-type':'application/json',authorization:'Bearer '+s.access_token,...(opt.headers||{})}});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j},[session]);
 
  const loadHealth=useCallback(async()=>{const j=await api('/admin/health');setHealth(j);return j},[api]);
