@@ -12,7 +12,7 @@ assertReopenMatch(['R01','R03'],[{rule_id:'R01'},{rule_id:'R03'}]);
 assert.throws(()=>assertReopenMatch(['R01'],[{rule_id:'R02'}]),/no longer matches/);
 
 const ui=fs.readFileSync(new URL('./gp_snapshot_ops_ui.js',import.meta.url),'utf8');
-const html=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
+const legacyHtml=fs.readFileSync(new URL('../legacy-console.html',import.meta.url),'utf8');\nconst cockpitHtml=fs.readFileSync(new URL('../index.html',import.meta.url),'utf8');
 assert.match(ui,/Snapshot Operations/);
 assert.match(ui,/Reopen \/ Reprint/);
 const patchSource=ui.match(/const patch=\{[^}]+\}/s)?.[0]||'';

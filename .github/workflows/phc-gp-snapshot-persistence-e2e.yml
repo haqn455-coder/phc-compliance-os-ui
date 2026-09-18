@@ -33,6 +33,15 @@ jobs:
             N=$(printf '%s' "$P" | tr '[:lower:]' '[:upper:]')
             echo "${N}_TOKEN=$T" >> "$GITHUB_ENV"
           done
+      - name: Record production-rule baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION")
+          N=$(printf '%s' "$P" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))")
+          echo "PRODUCTION_RULE_BASELINE=$N" >> "$GITHUB_ENV"
+          echo "Production rule baseline: $N"
+
       - name: Owner A inserts deterministic privacy-minimum snapshot
         shell: bash
         run: |
@@ -140,7 +149,7 @@ jobs:
           BODY='{"tenant_id":"'"$TENANT_A"'","snapshot_version":"GP_READINESS_SNAPSHOT_V0_1","clinic_name":"Too Many","district_city":"Layyah","respondent_role":"Owner-doctor","contact":"03000000000","answers":{"Q01":"Bad","Q02":"Layyah","Q03":"Owner-doctor","Q04":"03000000000"},"triggered_rule_ids":["R01","R02","R03","R04","R05","R06"],"lead_status":"SNAPSHOT_CREATED","pilot_status":"WAITLIST_UNTIL_PRODUCTION_PACK"}'
           CODE=$(curl -sS -o toomany.json -w '%{http_code}' -X POST -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" -H 'Content-Type: application/json' -d "$BODY" "$BASE/rest/v1/presales_snapshots")
           test "$CODE" = "400"
-      - name: Cleanup synthetic snapshot and assert zero production rules unchanged
+      - name: Cleanup synthetic snapshot and assert production rules unchanged
         if: always()
         shell: bash
         run: |
@@ -151,4 +160,4 @@ jobs:
           C=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/presales_snapshots?select=id&clinic_name=like.CI%20Snapshot%25")
           printf '%s' "$C" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]"
           P=$(curl -sS --fail-with-body -H "apikey: $KEY" -H "Authorization: Bearer $OWNERA_TOKEN" "$BASE/rest/v1/requirement_rule_versions?select=id&release_status=eq.APPROVED_FOR_PRODUCTION")
-          printf '%s' "$P" | python3 -c "import sys,json; assert json.load(sys.stdin)==[]; print('Snapshot operations RLS E2E PASS; production rules remain zero')"
+          printf '%s' "$P" | python3 -c "import sys,json,os; n=len(json.load(sys.stdin)); b=int(os.environ['PRODUCTION_RULE_BASELINE']); assert n==b, f'production rule count changed: {b} -> {n}'; print(f'Snapshot operations RLS E2E PASS; production rules unchanged at {n}')"
