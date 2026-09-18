@@ -18,8 +18,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}a{color:inherit}
 <div id="modal"></div>
 <script type="module">
 import{createClient}from'@supabase/supabase-js';
-const URL='https://auzbkudpqdmrgyxtwaiy.supabase.co',KEY='sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw',API=URL+'/functions/v1/pilot-onboarding',P01='eaabf1de-53d7-45fb-b943-a444af3258da';
-const s=createClient(URL,KEY,{auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}});
+const SUPABASE_URL='https://auzbkudpqdmrgyxtwaiy.supabase.co',KEY='sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw',API=SUPABASE_URL+'/functions/v1/pilot-onboarding',P01='eaabf1de-53d7-45fb-b943-a444af3258da';
+const s=createClient(SUPABASE_URL,KEY,{auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}});
 const LOGIN='https://haqn455-coder.github.io/phc-compliance-os-ui/p01-login.html',embed=new URL(location.href).searchParams.get('embed')==='1';
 if(embed)document.body.classList.add('embed');
 const h=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
