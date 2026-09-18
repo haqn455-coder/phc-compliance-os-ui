@@ -29,7 +29,7 @@ jobs:
         run: npm run build
       - name: Preserve legacy and clinic routes
         run: |
-          for f in apply-founder-baseline.html clinic.html founder-clinic-pilot.html founder-export.html founder-pilot.html friend-demo.html legacy-console.html legacy-p01-owner.html p01-login.html p01-owner.html pilot-admin.html pilot-request.html robots.txt; do
+          for f in apply-founder-baseline.html founder-clinic-pilot.html founder-export.html founder-pilot.html friend-demo.html legacy-console.html legacy-p01-owner.html p01-login.html p01-owner.html pilot-admin.html pilot-request.html robots.txt; do
             if [ -f "$f" ]; then cp "$f" dist/; fi
           done
           for d in product persistence regulatory; do
