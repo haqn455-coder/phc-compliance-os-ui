@@ -12,7 +12,7 @@
 <script type="module">
 import{createClient}from'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const s=createClient('https://auzbkudpqdmrgyxtwaiy.supabase.co','sb_publishable_3G6sjO0orxo7FjoS2hUNDw_bbsavIbw',{auth:{detectSessionInUrl:true,persistSession:true}});
-const ROOT='https://haqn455-coder.github.io/phc-compliance-os-ui/';
+const ROOT=new URL('./',location.href).toString();
 const portal=ROOT,params=new URL(location.href).searchParams,targetTenant=params.get('tenant')||'',targetPilot=params.get('pilot')||'';
 const clinicUrl=new URL('clinic.html',ROOT);if(targetTenant)clinicUrl.searchParams.set('tenant',targetTenant);if(targetPilot)clinicUrl.searchParams.set('pilot',targetPilot);
 const loginUrl=new URL('p01-login.html',ROOT);if(targetTenant)loginUrl.searchParams.set('tenant',targetTenant);if(targetPilot)loginUrl.searchParams.set('pilot',targetPilot);
@@ -28,7 +28,7 @@ if(session){
     else{msg.className='warn';msg.innerHTML='This link belongs to another clinic. You are signed in as <b>'+h(session.user.email||'another clinic user')+'</b>.<br><button id="openClinic" style="margin-right:8px">Open my assigned clinic</button><button id="switchAccount">Sign out / switch account</button>';openClinic.onclick=()=>location.replace(new URL('clinic.html',ROOT));switchAccount.onclick=async()=>{await s.auth.signOut();location.reload()}}
   }else accountCard(session)
 }
-go.onclick=async()=>{go.disabled=true;msg.className='';msg.textContent='Sending…';const e=email.value.trim();if(!e){go.disabled=false;msg.className='er';msg.textContent='Enter your invited email.';return}const{error}=await s.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:targetTenant?clinicUrl.toString():loginUrl.toString()}});go.disabled=false;if(error){const t=(error.message||'').toLowerCase();if(t.includes('rate limit')){msg.className='warn';msg.textContent='Sign-in email is temporarily rate-limited. Do not keep pressing the button; use the newest email already received or retry after the mail window resets.'}else{msg.className='er';msg.textContent=error.message}}else{msg.className='ok';msg.textContent='New sign-in link sent. Open the newest email; older or already-used links are invalid.'}}
+go.onclick=async()=>{go.disabled=true;msg.className='';msg.textContent='Sending…';const e=email.value.trim();if(!e){go.disabled=false;msg.className='er';msg.textContent='Enter your invited email.';return}const{error}=await s.auth.signInWithOtp({email:e,options:{shouldCreateUser:false,emailRedirectTo:targetTenant?clinicUrl.toString():loginUrl.toString()}});go.disabled=false;if(error){const t=(error.message||'').toLowerCase();if(t.includes('rate limit')){msg.className='warn';msg.textContent='Sign-in email is temporarily rate-limited. Do not keep pressing the button; use the newest email already received or retry after the mail window resets.'}else{msg.className='er';msg.textContent=error.message}}else{msg.className='ok';msg.textContent='If this email has approved clinic access, the newest sign-in link will arrive shortly.'}}
 </script>
 </body>
 </html>

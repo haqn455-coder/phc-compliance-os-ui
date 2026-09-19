@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "node product/tenant_routing_contract.test.mjs && tsc -b && vite build",
+    "postbuild": "node product/copy-static-routes.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/phc-compliance-os-ui/',
+  // Relative assets keep the existing GitHub Pages subpath working while the
+  // same dist/ can be served from Firebase Hosting at the production root.
+  base: './',
   build: {
     outDir: 'dist',
     sourcemap: false,

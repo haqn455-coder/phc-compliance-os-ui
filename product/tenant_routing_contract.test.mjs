@@ -6,6 +6,7 @@ const login=read('../p01-login.html'),clinic=read('../clinic.html'),cockpit=read
 
 assert.match(login,/targetTenant=params\.get\('tenant'\)/);
 assert.match(login,/emailRedirectTo:targetTenant\?clinicUrl\.toString\(\)/);
+assert.match(login,/shouldCreateUser:false/);
 assert.match(login,/This link belongs to another clinic/);
 assert.match(clinic,/authLinkError=/);
 assert.ok(clinic.indexOf('if(authLinkError)')<clinic.lastIndexOf("s.auth.getSession()"));
@@ -22,7 +23,9 @@ assert.match(clinic,/clinicAICaseRegistry/);
 assert.match(onboarding,/multiple clinic assignments found/);
 assert.match(onboarding,/eq\('tenant_id',requested\)/);
 assert.match(onboarding,/admin\/tenant-preview/);
-assert.match(onboarding,/redirectTo:tenantRedirect\(tenantId,pilotCode\)/);
+assert.match(onboarding,/redirectTo:tenantRedirect\(allowedOrigin\(req\),tenantId,pilotCode\)/);
+assert.match(onboarding,/multiple clinic assignments found; open a tenant-specific clinic link/);
+assert.match(onboarding,/open_pilot_entitlement/);
 assert.match(cockpit,/event==='INITIAL_SESSION'/);
 assert.match(cockpit,/event==='TOKEN_REFRESHED'/);
 

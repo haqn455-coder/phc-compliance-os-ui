@@ -1,5 +1,5 @@
 export default function P01Workspace({tenantId}:{tenantId:string}) {
-  const src=`https://haqn455-coder.github.io/phc-compliance-os-ui/clinic.html?embed=1&tenant=${encodeURIComponent(tenantId)}`;
+  const src=`clinic.html?embed=1&tenant=${encodeURIComponent(tenantId)}`;
   return (
     <section className="overflow-hidden rounded-2xl border bg-white shadow-soft">
       <iframe
